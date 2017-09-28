@@ -438,16 +438,28 @@ class ItemDetail(DetailView):
 
     model = models.Item
     template_name = 'timeside/item_detail.html'
+    serializer_class = serializers.ItemSerializer
 
     def get_object(self):
         return get_object_or_404(models.Item, uuid=self.kwargs.get("uuid"))
 
     def get_context_data(self, **kwargs):
         context = super(ItemDetail, self).get_context_data(**kwargs)
-        ts_item = {'ts_api_root': str(reverse_lazy('api-root', request=self.request)),
-                   'ts_item_uuid': self.get_object().uuid
-                   }
+        ts_item = {
+            'ts_api_root': str(reverse_lazy('api-root', request=self.request)),
+            'ts_item_uuid': self.get_object().uuid
+        }
         context['ts_item'] = json.dumps(ts_item)
+        context['transcode_url_mp3'] = str(
+            reverse_lazy(
+                'item-transcode', args=[self.get_object().uuid, "mp3"], request=self.request
+            )
+        )
+        # context['transcode_url_denoised'] = str(
+        #     reverse_lazy(
+        #         'item-transcode', args=[self.get_object().uuid, "mp3", "dummy_denoise"], request=self.request
+        #     )
+        # )
         return context
 
 
@@ -523,3 +535,7 @@ class ItemTranscode(DetailView):
 
 class PlayerView(TemplateView):
     template_name = "timeside/player.html"
+
+
+class TrackswitchView(ItemDetail):
+    template_name = "timeside/trackswitch.html"

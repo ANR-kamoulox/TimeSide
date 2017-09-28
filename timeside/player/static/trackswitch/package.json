@@ -1,0 +1,7 @@
+{
+  "name": "timeside-trackswitch",
+  "version": "1.0.0",
+  "dependencies": {
+    "trackswitch": "^0.1.0"
+  }
+}

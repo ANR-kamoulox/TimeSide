@@ -44,13 +44,19 @@ urlpatterns = [
     url(r'^$', views.ItemList.as_view(), name="timeside-item-list"),
     # Items
     # ex: /item/5/
-    url(r'^items/(?P<uuid>[0-9a-z-]+)/', include([
-        url(r'^$', views.ItemDetail.as_view(), name="timeside-item-detail"),
-        url(r'^export/$', views.ItemDetailExport.as_view(),
-            name='timeside-item-export'),
-        url(r'^download/(?P<extension>' + EXPORT_EXT + ')$',
-            views.ItemTranscode.as_view(), name="item-transcode"),
-    ])
+    url(
+        r'^items/(?P<uuid>[0-9a-z-]+)/',
+        include([
+            url(r'^$', views.ItemDetail.as_view(), name="timeside-item-detail"),
+            url(r'^export/$', views.ItemDetailExport.as_view(),
+                name='timeside-item-export'),
+            url(r'^download/(?P<extension>' + EXPORT_EXT + ')$',
+                views.ItemTranscode.as_view(), name="item-transcode"),
+            url(r'^trackswitch/$',
+                views.TrackswitchView.as_view(),
+                name="trackswitch-player"
+            )
+        ])
     ),
     # Results
     url(r'^api/results/(?P<uuid>[0-9a-z-]+)/visual/',
