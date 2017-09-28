@@ -469,18 +469,29 @@ class ItemTranscode(DetailView):
     def get_object(self):
         return get_object_or_404(models.Item, uuid=self.kwargs.get("uuid"))
 
-    def transcode_segment(self, uri, start, duration, encoder_pid, mime_type):
-        decoder = timeside.core.get_processor('file_decoder')(uri, start=start, duration=duration)
+    def transcode_segment(
+        self, uri, start, duration, encoder_pid, mime_type, ts_fx=None
+    ):
+        decoder = timeside.core.get_processor('file_decoder')(
+            uri,
+            start=start,
+            duration=duration
+        )
         import tempfile
         with tempfile.NamedTemporaryFile(delete=True) as tmp_file:
             encoder = timeside.core.get_processor(encoder_pid)(tmp_file.name, overwrite=True)
-            pipe = (decoder | encoder)
+            if ts_fx is not None:
+                fx = timeside.core.get_processor(ts_fx)()
+                pipe = (decoder | fx | encoder)
+            else:
+                pipe = (decoder | encoder)
+
             pipe.run()
 
             return FileResponse(open(tmp_file.name, 'rb'),
                                 content_type=mime_type)
 
-    def get(self, request, uuid, extension):
+    def get(self, request, uuid, extension, effect=None):
         from . utils import TS_ENCODERS_EXT
 
         if extension not in TS_ENCODERS_EXT:
@@ -504,7 +515,8 @@ class ItemTranscode(DetailView):
                                           start=start,
                                           duration=duration,
                                           encoder_pid=encoder,
-                                          mime_type=mime_type)
+                                          mime_type=mime_type,
+                                          ts_fx=effect)
         # Get or Create Processor = encoder
         processor, created = models.Processor.objects.get_or_create(pid=encoder)
         # Get or Create Preset with processor
@@ -516,7 +528,7 @@ class ItemTranscode(DetailView):
             if not os.path.exists(result.file.path):
                 # Result exists but not file (may have been deleted)
                 result.delete()
-                return self.get(request, uuid, extension)
+                return self.get(request, uuid, extension, effect)
             # Result and file exist --> OK
             return FileResponse(open(result.file.path, 'rb'),
                                 content_type=result.mime_type)
@@ -527,7 +539,7 @@ class ItemTranscode(DetailView):
                 experience=preset.get_single_experience(),
                 selection=item.get_single_selection())
             task.run(wait=True)
-            return self.get(request, uuid, extension)
+            return self.get(request, uuid, extension, effect)
             # response = StreamingHttpResponse(streaming_content=stream_from_task(task),
             #                                 content_type=mime_type)
             # return response
