@@ -439,16 +439,28 @@ class ItemDetail(DetailView):
 
     model = models.Item
     template_name = 'timeside/item_detail.html'
+    serializer_class = serializers.ItemSerializer
 
     def get_object(self):
         return get_object_or_404(models.Item, uuid=self.kwargs.get("uuid"))
 
     def get_context_data(self, **kwargs):
         context = super(ItemDetail, self).get_context_data(**kwargs)
-        ts_item = {'ts_api_root': str(reverse_lazy('api-root', request=self.request)),
-                   'ts_item_uuid': self.get_object().uuid
-                   }
+        ts_item = {
+            'ts_api_root': str(reverse_lazy('api-root', request=self.request)),
+            'ts_item_uuid': self.get_object().uuid
+        }
         context['ts_item'] = json.dumps(ts_item)
+        context['transcode_url_mp3'] = str(
+            reverse_lazy(
+                'item-transcode', args=[self.get_object().uuid, "mp3"], request=self.request
+            )
+        )
+        # context['transcode_url_denoised'] = str(
+        #     reverse_lazy(
+        #         'item-transcode', args=[self.get_object().uuid, "mp3", "dummy_denoise"], request=self.request
+        #     )
+        # )
         return context
 
 def serve_media(filename, content_type="", buffering=True):
@@ -494,18 +506,29 @@ class ItemTranscode(DetailView):
     def get_object(self):
         return get_object_or_404(models.Item, uuid=self.kwargs.get("uuid"))
 
-    def transcode_segment(self, uri, start, duration, encoder_pid, mime_type):
-        decoder = timeside.core.get_processor('file_decoder')(uri, start=start, duration=duration)
+    def transcode_segment(
+        self, uri, start, duration, encoder_pid, mime_type, ts_fx=None
+    ):
+        decoder = timeside.core.get_processor('file_decoder')(
+            uri,
+            start=start,
+            duration=duration
+        )
         import tempfile
         with tempfile.NamedTemporaryFile(delete=True) as tmp_file:
             encoder = timeside.core.get_processor(encoder_pid)(tmp_file.name, overwrite=True)
-            pipe = (decoder | encoder)
+            if ts_fx is not None:
+                fx = timeside.core.get_processor(ts_fx)()
+                pipe = (decoder | fx | encoder)
+            else:
+                pipe = (decoder | encoder)
+
             pipe.run()
 
             return FileResponse(open(tmp_file.name, 'rb'),
                                 content_type=mime_type)
 
-    def get(self, request, uuid, extension):
+    def get(self, request, uuid, extension, effect=None):
         from . utils import TS_ENCODERS_EXT
 
         if extension not in TS_ENCODERS_EXT:
@@ -529,7 +552,8 @@ class ItemTranscode(DetailView):
                                           start=start,
                                           duration=duration,
                                           encoder_pid=encoder,
-                                          mime_type=mime_type)
+                                          mime_type=mime_type,
+                                          ts_fx=effect)
         # Get or Create Processor = encoder
         processor, created = models.Processor.objects.get_or_create(pid=encoder)
         # Get or Create Preset with processor
@@ -541,7 +565,7 @@ class ItemTranscode(DetailView):
             if not os.path.exists(result.file.path):
                 # Result exists but not file (may have been deleted)
                 result.delete()
-                return self.get(request, uuid, extension)
+                return self.get(request, uuid, extension, effect)
             # Result and file exist --> OK
 
             # Serve file using X-Accel-Redirect Nginx if DEBUG=False
@@ -555,7 +579,7 @@ class ItemTranscode(DetailView):
                 experience=preset.get_single_experience(),
                 selection=item.get_single_selection())
             task.run(wait=True)
-            return self.get(request, uuid, extension)
+            return self.get(request, uuid, extension, effect)
             # response = StreamingHttpResponse(streaming_content=stream_from_task(task),
             #                                 content_type=mime_type)
             # return response
@@ -563,3 +587,7 @@ class ItemTranscode(DetailView):
 
 class PlayerView(TemplateView):
     template_name = "timeside/player.html"
+
+
+class TrackswitchView(ItemDetail):
+    template_name = "timeside/trackswitch.html"
