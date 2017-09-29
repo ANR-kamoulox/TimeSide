@@ -12,6 +12,10 @@ python $manage bower_install -- --allow-root
 python $manage timeside-create-admin-user
 python $manage timeside-create-boilerplate
 
+# fix media access rights
+chown www-data:www-data $media
+find $media -type d -exec chown www-data:www-data {} \;
+
 if [ $DEBUG = "False" ]; then
     python $manage update_index --workers $processes &
 fi
